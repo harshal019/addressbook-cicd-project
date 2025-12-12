@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Fix Jenkins After EC2 IP Change — Quick Steps</title>
+  <style>
+    :root{
+      --bg:#0f1113;
+      --panel:#121417;
+      --muted:#9aa1a6;
+      --accent:#ff8c2b;
+      --accent-2:#28b2a6;
+      --text:#e6eef2;
+      --mono:#e0e0e0;
+      --card-shadow: 0 6px 18px rgba(0,0,0,0.6);
+      font-family: Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,#0c0d0f,#0f1113);color:var(--text)}
+    .wrap{max-width:980px;margin:28px auto;padding:28px;background:linear-gradient(180deg,#0f1214,#0c0d0f);border-radius:12px;box-shadow:var(--card-shadow);border:1px solid rgba(255,255,255,0.02)}
+    h1{margin:0 0 8px;font-size:20px;letter-spacing:0.6px}
+    p.lead{margin:0 0 18px;color:var(--muted)}
+    .cols{display:flex;gap:18px;flex-wrap:wrap}
+    .col{flex:1;min-width:280px}
+    .card{background:var(--panel);padding:14px;border-radius:10px;border:1px solid rgba(255,255,255,0.02);box-shadow:0 6px 14px rgba(0,0,0,0.4)}
+    .card h3{margin:0 0 8px;font-size:15px}
+    .muted{color:var(--muted);font-size:13px;margin-bottom:12px}
+    pre{background:#0b0c0d;padding:12px;border-radius:8px;color:var(--mono);overflow:auto;font-size:13px;line-height:1.45}
+    .cmd-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    button.copy{background:linear-gradient(180deg,#1b1e20,#161819);color:var(--text);padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.03);cursor:pointer;font-weight:600}
+    button.copy:hover{transform:translateY(-1px)}
+    .hint{font-size:13px;color:var(--muted);margin-top:8px}
+    .ok{color:var(--accent-2);font-weight:700}
+    .warn{color:var(--accent);font-weight:700}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    .center{display:flex;gap:8px;justify-content:center;margin-top:16px}
+    a.link{color:var(--accent);text-decoration:none;font-weight:600}
+    .badge{display:inline-block;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,0.02);font-size:12px;color:var(--muted);border:1px solid rgba(255,255,255,0.01)}
+  </style>
+</head>
+<body>
+  <div class="wrap" role="main">
+    <h1>Fix Jenkins after EC2 restart (IP changed) — Quick Actions</h1>
+    <p class="lead">Follow these three critical steps to restore Jenkins speed. Click the Copy buttons to copy commands and run them on your EC2 instance or local machine.</p>
+
+    <div class="cols">
+      <div class="col">
+        <div class="card" aria-labelledby="step1">
+          <h3 id="step1">1. Assign an Elastic IP (Permanent fix)</h3>
+          <div class="muted">If you don't want IP to change after reboot — assign an Elastic IP in AWS. This is the recommended, permanent fix.</div>
+          <div class="muted">Console steps (fast): <span class="badge">EC2 → Network & Security → Elastic IPs → Allocate → Associate</span></div>
+          <div style="margin-top:10px">
+            <strong class="muted">AWS CLI (example)</strong>
+            <pre id="cli-eip"># Allocate new Elastic IP (returns allocation id)
+aws ec2 allocate-address --domain vpc
+
+# Example: associate existing allocation to your instance
+# Replace ALLOC_ID and INSTANCE_ID
+aws ec2 associate-address --allocation-id eipalloc-ALLOC_ID --instance-id i-INSTANCE_ID</pre>
+            <div class="center"><button class="copy" data-target="cli-eip">Copy AWS CLI commands</button></div>
+            <p class="hint">After associating EIP update DNS or use the Elastic IP when configuring Jenkins URL and webhooks.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:14px" aria-labelledby="step2">
+          <h3 id="step2">2. Update Jenkins URL (Jenkins config)</h3>
+          <div class="muted">Make Jenkins use the new stable address (Elastic IP or domain). This fixes UI links, webhook callbacks, and some plugin endpoints.</div>
+          <pre id="jenkins-url">
+# Manual (Jenkins UI):
+# Manage Jenkins → Configure System → Jenkins Location → set "Jenkins URL" to:
+http://YOUR_ELASTIC_IP_OR_HOSTNAME:8080
+
+# Or update via script (if using JCasC or CLI)
+# Example using Jenkins Script Console (Groovy)
+Jenkins.instance.setSystemMessage("Updated Jenkins URL")
+def jc = jenkins.model.JenkinsLocationConfiguration.get()
+jc.setUrl("http://YOUR_ELASTIC_IP:8080")
+jc.save()</pre>
+          <div class="center"><button class="copy" data-target="jenkins-url">Copy Jenkins steps</button></div>
+          <p class="hint">If you use a reverse proxy (nginx/ALB), prefer a stable DNS name (e.g., <span class="ok">jenkins.example.com</span>).</p>
+        </div>
+
+        <div class="card" style="margin-top:14px" aria-labelledby="step3">
+          <h3 id="step3">3. Restart Jenkins & reverse proxy</h3>
+          <div class="muted">Restart services so they pick up the new config and new network mapping.</div>
+          <pre id="restart-cmds"># Restart Jenkins service
+sudo systemctl restart jenkins
+
+# If you use nginx as a proxy
+sudo systemctl restart nginx
+
+# Check status and logs
+sudo systemctl status jenkins
+sudo journalctl -u jenkins -n 200 --no-pager
+sudo tail -n 200 /var/log/nginx/error.log</pre>
+          <div class="center"><button class="copy" data-target="restart-cmds">Copy restart commands</button></div>
+          <p class="hint">If service fails to start, paste the last 50 lines of Jenkins log here and I can help decode them.</p>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card" aria-labelledby="webhook">
+          <h3 id="webhook">4. Update Webhooks & Agents (quick)</h3>
+          <div class="muted">If GitHub/GitLab webhooks or build agents point to old IP, update them to the new Elastic IP / DNS name.</div>
+          <pre id="webhook-steps"># GitHub:
+# Repo → Settings → Webhooks → Edit → change "Payload URL" to:
+http://YOUR_ELASTIC_IP_OR_HOSTNAME:8080/github-webhook/
+
+# For JNLP agents:
+# On agent machines restart the agent with new master host:
+java -jar agent.jar -jnlpUrl http://YOUR_ELASTIC_IP:8080/computer/agent-name/slave-agent.jnlp</pre>
+          <div class="center"><button class="copy" data-target="webhook-steps">Copy webhook/agent steps</button></div>
+          <p class="hint">Check GitHub → Repo → Webhooks → Recent Deliveries to confirm successful delivery.</p>
+        </div>
+
+        <div class="card" style="margin-top:14px" aria-labelledby="diagnose">
+          <h3 id="diagnose">Quick Diagnostics</h3>
+          <div class="muted">Use these checks to confirm connectivity & find issues.</div>
+          <pre id="diagnose-cmds"># Check instance IPs
+curl -s http://169.254.169.254/latest/meta-data/public-ipv4
+curl -s http://169.254.169.254/latest/meta-data/local-ipv4
+
+# Test Jenkins endpoint locally
+curl -v http://127.0.0.1:8080/   # from the EC2 instance
+curl -v http://YOUR_ELASTIC_IP:8080/  # from another machine
+
+# Check agent connections (look for ssh or JNLP processes)
+ss -tnp | grep 50000  # JNLP default port
+ss -tnp | grep ssh
+</pre>
+          <div class="center"><button class="copy" data-target="diagnose-cmds">Copy diagnostic commands</button></div>
+          <p class="hint">If curl shows timeouts or connection refused, the IP/port or firewall/security group is likely the issue.</p>
+        </div>
+
+        <div class="card" style="margin-top:14px" aria-labelledby="notes">
+          <h3 id="notes">Notes & Recommended Long-term Setup</h3>
+          <ul class="muted" style="padding-left:18px;margin:8px 0 0">
+            <li>Use <strong class="ok">Elastic IP</strong> or <strong class="ok">DNS + ALB/NLB</strong> (Route53) to hide instance IP changes.</li>
+            <li>Use Jenkins Configuration as Code (JCasC) and IaC (Terraform) to automate config updates.</li>
+            <li>For agents, prefer automatic reconnection (cloud agents or ephemeral build workers).</li>
+          </ul>
+          <p class="hint">Want a script to re-connect all JNLP agents or to update webhooks programmatically? I can generate it for you.</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div style="display:flex;gap:12px;align-items:center;justify-content:space-between">
+        <div>Need customised commands for your environment? Tell me: <strong class="ok">nginx?</strong> / <strong class="ok">agents?</strong> / <strong class="ok">GitHub webhooks?</strong></div>
+        <div><span class="muted">Last updated:</span> <span class="ok">now</span></div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Attach copy behavior
+    document.querySelectorAll('button.copy').forEach(btn=>{
+      btn.addEventListener('click', async ()=> {
+        const id = btn.getAttribute('data-target');
+        const el = document.getElementById(id);
+        if(!el) return;
+        const text = el.innerText;
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.innerText = 'Copied ✓';
+          setTimeout(()=> btn.innerText = 'Copy', 1400);
+        } catch(e) {
+          // fallback
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); btn.innerText = 'Copied ✓'; }
+          catch(e2) { alert('Copy failed — select and copy manually.'); }
+          document.body.removeChild(ta);
+          setTimeout(()=> btn.innerText = 'Copy', 1400);
+        }
+      });
+    });
+  </script>
+</body>
+</html>
