@@ -1,8 +1,8 @@
-This is my first automated Project Uing The Webhook
+This is my first automated Project Using The Webhook
 this is my address book  website
   
 
-In this webapp it contains the adressbook
+This webapp contains the address book
 
 ddooiouo
 This tutorial teaches you some of the basic concepts in [Vaadin Framework](https://vaadin.com). It is meant to be
